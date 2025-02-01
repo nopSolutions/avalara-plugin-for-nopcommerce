@@ -363,14 +363,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     ?? throw new NopException("No response from the service");
 
                 //whether there are any errors
-                if (transaction.messages?.Any() ?? false)
-                {
-                    throw new NopException(transaction.messages
-                        .Aggregate(string.Empty, (error, message) => $"{error}{message.summary}{Environment.NewLine}"));
-                }
+                var errors = transaction.messages?.Where(m => !m.severity?.ToLower().Equals("success") ?? true).ToList() ?? new List<AvaTaxMessage>();
 
-                //return the result
-                return transaction;
+                if (!errors.Any())
+                    return transaction;
+                
+                throw new NopException(errors.Aggregate(string.Empty, (error, message) => $"{error}{message.summary}{Environment.NewLine}"));
             });
         }
 
