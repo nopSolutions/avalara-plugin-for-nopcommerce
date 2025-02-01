@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Avalara.AvaTax.RestClient;
+using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Services.Logging;
@@ -359,14 +360,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     LogTaxTransaction(transaction, LogType.CreateResponse);
 
                 //whether there are any errors
-                if (transaction.messages?.Any() ?? false)
-                {
-                    throw new NopException(transaction.messages
-                        .Aggregate(string.Empty, (error, message) => $"{error}{message.summary}{Environment.NewLine}"));
-                }
+                var errors = transaction.messages?.Where(m => !m.severity?.ToLower().Equals("success") ?? true).ToList() ?? new List<AvaTaxMessage>();
 
-                //return the result
-                return transaction;
+                if (!errors.Any())
+                    return transaction;
+                
+                throw new NopException(errors.Aggregate(string.Empty, (error, message) => $"{error}{message.summary}{Environment.NewLine}"));
             });
         }
 
