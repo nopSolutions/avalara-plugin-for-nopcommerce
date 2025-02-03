@@ -72,31 +72,41 @@ namespace Nop.Plugin.Tax.Avalara
         /// <summary>
         /// Name of the view component to display entity use code field
         /// </summary>
-        public const string EntityUseCodeViewComponentName = "AvalaraEntityUseCode";
+        public const string ENTITY_USE_CODE_VIEW_COMPONENT_NAME = "AvalaraEntityUseCode";
 
         /// <summary>
         /// Name of the view component to display tax origin address type field
         /// </summary>
-        public const string TaxOriginViewComponentName = "AvalaraTaxOrigin";
+        public const string TAX_ORIGIN_VIEW_COMPONENT_NAME = "AvalaraTaxOrigin";
 
         /// <summary>
         /// Name of the view component to display export items button
         /// </summary>
-        public const string ExportItemsViewComponentName = "AvalaraExportItems";
+        public const string EXPORT_ITEMS_VIEW_COMPONENT_NAME = "AvalaraExportItems";
 
         /// <summary>
         /// Name of the view component to display entity use code
         /// </summary>
-        public const string TaxCodesViewComponentName = "AvalaraTaxCodes";
+        public const string TAX_CODES_VIEW_COMPONENT_NAME = "AvalaraTaxCodes";
 
         /// <summary>
         /// Name of the view component to validate entered address
         /// </summary>
-        public const string AddressValidationViewComponentName = "AvalaraAddressValidation";
+        public const string ADDRESS_VALIDATION_VIEW_COMPONENT_NAME = "AvalaraAddressValidation";
 
         /// <summary>
         /// Custom data objects context name
         /// </summary>
-        public const string ObjectContextName = "nop_object_context_tax_avalara";
+        public static string ObjectContextName = "nop_object_context_tax_avalara";
+
+        /// <summary>
+        /// Generic attribute name to hide general settings block on the plugin configuration page
+        /// </summary>
+        public static string HideGeneralBlock = "AvalaraPage.HideGeneralBlock";
+
+        /// <summary>
+        /// Generic attribute name to hide log block on the plugin configuration page
+        /// </summary>
+        public static string HideLogBlock = "AvalaraPage.HideLogBlock";
     }
 }

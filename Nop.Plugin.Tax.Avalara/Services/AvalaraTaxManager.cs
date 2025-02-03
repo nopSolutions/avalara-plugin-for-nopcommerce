@@ -17,8 +17,8 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly ILogger _logger;
-        private readonly ITaxTransactionLogService _taxTransactionLogService;
         private readonly IWorkContext _workContext;
+        private readonly TaxTransactionLogService _taxTransactionLogService;
 
         private AvaTaxClient _serviceClient;
 
@@ -28,13 +28,13 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         public AvalaraTaxManager(AvalaraTaxSettings avalaraTaxSettings,
             ILogger logger,
-            ITaxTransactionLogService taxTransactionLogService,
-            IWorkContext workContext)
+            IWorkContext workContext,
+            TaxTransactionLogService taxTransactionLogService)
         {
-            this._avalaraTaxSettings = avalaraTaxSettings;
-            this._logger = logger;
-            this._taxTransactionLogService = taxTransactionLogService;
-            this._workContext = workContext;
+            _avalaraTaxSettings = avalaraTaxSettings;
+            _logger = logger;
+            _workContext = workContext;
+            _taxTransactionLogService = taxTransactionLogService;
         }
 
         #endregion
@@ -54,7 +54,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     _serviceClient = new AvaTaxClient(AvalaraTaxDefaults.ApplicationName,
                         AvalaraTaxDefaults.ApplicationVersion, Environment.MachineName,
                         _avalaraTaxSettings.UseSandbox ? AvaTaxEnvironment.Sandbox : AvaTaxEnvironment.Production)
-                        .WithSecurity(_avalaraTaxSettings.AccountId, _avalaraTaxSettings.LicenseKey);
+                            .WithSecurity(_avalaraTaxSettings.AccountId, _avalaraTaxSettings.LicenseKey);
 
                     //invoke method after each request to services completed
                     _serviceClient.CallCompleted += OnCallCompleted;
@@ -363,12 +363,14 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     ?? throw new NopException("No response from the service");
 
                 //whether there are any errors
-                var errors = transaction.messages?.Where(m => !m.severity?.ToLower().Equals("success") ?? true).ToList() ?? new List<AvaTaxMessage>();
+                if (transaction.messages?.Any() ?? false)
+                {
+                    throw new NopException(transaction.messages
+                        .Aggregate(string.Empty, (error, message) => $"{error}{message.summary}{Environment.NewLine}"));
+                }
 
-                if (!errors.Any())
-                    return transaction;
-                
-                throw new NopException(errors.Aggregate(string.Empty, (error, message) => $"{error}{message.summary}{Environment.NewLine}"));
+                //return the result
+                return transaction;
             });
         }
 
@@ -386,7 +388,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     throw new NopException("Company not selected");
 
                 //return result
-                var transaction = ServiceClient.VoidTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, null, voidTransactionModel)
+                var transaction = ServiceClient.VoidTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, null, null, voidTransactionModel)
                     ?? throw new NopException("No response from the service");
 
                 return transaction;

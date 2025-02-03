@@ -9,7 +9,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
     /// <summary>
     /// Represents the tax transaction log service implementation
     /// </summary>
-    public class TaxTransactionLogService : ITaxTransactionLogService
+    public class TaxTransactionLogService
     {
         #region Fields
 
@@ -21,7 +21,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         public TaxTransactionLogService(IRepository<TaxTransactionLog> taxTransactionLogRepository)
         {
-            this._taxTransactionLogRepository = taxTransactionLogRepository;
+            _taxTransactionLogRepository = taxTransactionLogRepository;
         }
 
         #endregion
@@ -111,11 +111,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
         }
 
         /// <summary>
-        /// Clear tax transaction log
+        /// Delete log items
         /// </summary>
-        public virtual void ClearTaxTransactionLog()
+        /// <param name="ids">Log items identifiers</param>
+        public virtual void DeleteTaxTransactionLog(int[] ids)
         {
-            var log = this.GetTaxTransactionLog();
+            var log = _taxTransactionLogRepository.Table.Where(logItem => ids.Contains(logItem.Id));
             _taxTransactionLogRepository.Delete(log);
         }
 

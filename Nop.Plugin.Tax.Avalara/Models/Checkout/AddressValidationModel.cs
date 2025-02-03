@@ -7,6 +7,8 @@ namespace Nop.Plugin.Tax.Avalara.Models.Checkout
     /// </summary>
     public class AddressValidationModel : BaseNopModel
     {
+        #region Properties
+
         public string Message { get; set; }
 
         public bool IsError { get; set; }
@@ -14,5 +16,7 @@ namespace Nop.Plugin.Tax.Avalara.Models.Checkout
         public bool IsNewAddress { get; set; }
 
         public int AddressId { get; set; }
+
+        #endregion
     }
 }

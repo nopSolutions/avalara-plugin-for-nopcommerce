@@ -16,11 +16,11 @@ using Nop.Services.ExportImport;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
 using Nop.Services.Media;
+using Nop.Services.Messages;
 using Nop.Services.Orders;
 using Nop.Services.Security;
 using Nop.Services.Seo;
 using Nop.Services.Shipping;
-using Nop.Services.Stores;
 using Nop.Services.Tax;
 using Nop.Web.Areas.Admin.Controllers;
 using Nop.Web.Areas.Admin.Factories;
@@ -33,12 +33,12 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         private readonly AvalaraTaxManager _avalaraTaxManager;
         private readonly ILocalizationService _localizationService;
+        private readonly INotificationService _notificationService;
         private readonly IPermissionService _permissionService;
         private readonly IProductAttributeService _productAttributeService;
         private readonly IProductService _productService;
         private readonly ITaxCategoryService _taxCategoryService;
-        private readonly ITaxService _taxService;
-        private readonly IWorkContext _workContext;
+        private readonly ITaxPluginManager _taxPluginManager;
 
         #endregion
 
@@ -60,6 +60,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             ILocalizedEntityService localizedEntityService,
             IManufacturerService manufacturerService,
             INopFileProvider fileProvider,
+            INotificationService notificationService,
             IPdfService pdfService,
             IPermissionService permissionService,
             IPictureService pictureService,
@@ -72,10 +73,8 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             IShippingService shippingService,
             IShoppingCartService shoppingCartService,
             ISpecificationAttributeService specificationAttributeService,
-            IStoreMappingService storeMappingService,
-            IStoreService storeService,
             ITaxCategoryService taxCategoryService,
-            ITaxService taxService,
+            ITaxPluginManager taxPluginManager,
             IUrlRecordService urlRecordService,
             IWorkContext workContext,
             VendorSettings vendorSettings) : base(aclService,
@@ -93,6 +92,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 localizedEntityService,
                 manufacturerService,
                 fileProvider,
+                notificationService,
                 pdfService,
                 permissionService,
                 pictureService,
@@ -105,20 +105,18 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 shippingService,
                 shoppingCartService,
                 specificationAttributeService,
-                storeMappingService,
-                storeService,
                 urlRecordService,
                 workContext,
                 vendorSettings)
         {
-            this._avalaraTaxManager = avalaraTaxManager;
-            this._localizationService = localizationService;
-            this._permissionService = permissionService;
-            this._productAttributeService = productAttributeService;
-            this._productService = productService;
-            this._taxCategoryService = taxCategoryService;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _avalaraTaxManager = avalaraTaxManager;
+            _localizationService = localizationService;
+            _notificationService = notificationService;
+            _permissionService = permissionService;
+            _productAttributeService = productAttributeService;
+            _productService = productService;
+            _taxCategoryService = taxCategoryService;
+            _taxPluginManager = taxPluginManager;
         }
 
         #endregion
@@ -129,7 +127,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         public IActionResult ExportProducts(string selectedIds)
         {
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return RedirectToAction("List", "Product");
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
@@ -189,12 +187,12 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
                 //display results
                 if (result.HasValue && result > 0)
-                    SuccessNotification(string.Format(_localizationService.GetResource("Plugins.Tax.Avalara.Items.Export.Success"), result));
+                    _notificationService.SuccessNotification(string.Format(_localizationService.GetResource("Plugins.Tax.Avalara.Items.Export.Success"), result));
                 else
-                    ErrorNotification(_localizationService.GetResource("PPlugins.Tax.Avalara.Items.Export.Error"));
+                    _notificationService.ErrorNotification(_localizationService.GetResource("PPlugins.Tax.Avalara.Items.Export.Error"));
             }
             else
-                SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported"));
+                _notificationService.SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported"));
 
             return RedirectToAction("List", "Product");
         }

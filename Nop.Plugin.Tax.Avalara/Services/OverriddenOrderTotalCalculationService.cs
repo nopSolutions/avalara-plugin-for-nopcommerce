@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Nop.Core;
@@ -30,8 +30,10 @@ namespace Nop.Plugin.Tax.Avalara.Services
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IPaymentService _paymentService;
         private readonly IPriceCalculationService _priceCalculationService;
+        private readonly IShippingPluginManager _shippingPluginManager;
         private readonly IStoreContext _storeContext;
         private readonly ITaxService _taxService;
+        private readonly IWorkContext _workContext;
         private readonly ShoppingCartSettings _shoppingCartSettings;
 
         #endregion
@@ -47,6 +49,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             IPaymentService paymentService,
             IPriceCalculationService priceCalculationService,
             IRewardPointService rewardPointService,
+            IShippingPluginManager shippingPluginManager,
             IShippingService shippingService,
             IShoppingCartService shoppingCartService,
             IStoreContext storeContext,
@@ -63,6 +66,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 paymentService,
                 priceCalculationService,
                 rewardPointService,
+                shippingPluginManager,
                 shippingService,
                 shoppingCartService,
                 storeContext,
@@ -73,13 +77,15 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 shoppingCartSettings,
                 taxSettings)
         {
-            this._genericAttributeService = genericAttributeService;
-            this._httpContextAccessor = httpContextAccessor;
-            this._paymentService = paymentService;
-            this._priceCalculationService = priceCalculationService;
-            this._storeContext = storeContext;
-            this._taxService = taxService;
-            this._shoppingCartSettings = shoppingCartSettings;
+            _genericAttributeService = genericAttributeService;
+            _httpContextAccessor = httpContextAccessor;
+            _paymentService = paymentService;
+            _priceCalculationService = priceCalculationService;
+            _shippingPluginManager = shippingPluginManager;
+            _storeContext = storeContext;
+            _taxService = taxService;
+            _workContext = workContext;
+            _shoppingCartSettings = shoppingCartSettings;
         }
 
         #endregion
@@ -120,8 +126,11 @@ namespace Nop.Plugin.Tax.Avalara.Services
             //subtotal with discount
             var subtotalBase = subTotalWithDiscountBase;
 
+            //LoadAllShippingRateComputationMethods
+            var shippingRateComputationMethods = _shippingPluginManager.LoadActivePlugins(_workContext.CurrentCustomer, _storeContext.CurrentStore.Id);
+
             //shipping without tax
-            var shoppingCartShipping = GetShoppingCartShippingTotal(cart, false);
+            var shoppingCartShipping = GetShoppingCartShippingTotal(cart, false, shippingRateComputationMethods);
 
             //payment method additional fee without tax
             var paymentMethodAdditionalFeeWithoutTax = decimal.Zero;
@@ -135,7 +144,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             }
 
             //tax
-            var shoppingCartTax = GetTaxTotal(cart, usePaymentMethodAdditionalFee);
+            var shoppingCartTax = GetTaxTotal(cart, shippingRateComputationMethods, usePaymentMethodAdditionalFee);
 
             //Avalara plugin changes
             //adjust tax total according to received value from the Avalara

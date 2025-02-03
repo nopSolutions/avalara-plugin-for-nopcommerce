@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Nop.Core;
 
 namespace Nop.Plugin.Tax.Avalara.Domain
@@ -6,7 +6,7 @@ namespace Nop.Plugin.Tax.Avalara.Domain
     /// <summary>
     /// Represents a tax transaction log record
     /// </summary>
-    public partial class TaxTransactionLog : BaseEntity
+    public class TaxTransactionLog : BaseEntity
     {
         /// <summary>
         /// Gets or sets the response status code

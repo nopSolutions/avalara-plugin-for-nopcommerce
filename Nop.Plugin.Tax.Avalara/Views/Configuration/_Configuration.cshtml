@@ -8,7 +8,7 @@
                 <br />
                 1. <a href="https://www.avalara.com" target="_blank">Create an Avalara account</a><br />
                 2. Log in at the <a href="https://admin-avatax.avalara.net/login.aspx" target="_blank">production service</a>
-                or at the <a href="https://admin-development.avalara.net/login.aspx target=" _blank"> development service</a><br />
+                or at the <a href="https://admin-development.avalara.net/login.aspx" target="_blank"> development service</a><br />
                 3. Add a company and some nexus jurisdiction selections to get any tax results<br />
                 4. Fill in your Avalara account details below<br />
                 <br />
@@ -30,7 +30,7 @@
                     <nop-label asp-for="LicenseKey" />
                 </div>
                 <div class="col-md-9">
-                    <nop-editor asp-for="LicenseKey" asp-required="true" />
+                    <nop-editor asp-for="LicenseKey" asp-required="true" asp-value="@Model.LicenseKey" />
                     <span asp-validation-for="LicenseKey"></span>
                 </div>
             </div>
@@ -39,7 +39,7 @@
                     <nop-label asp-for="CompanyCode" />
                 </div>
                 <div class="col-md-9">
-                    <nop-select asp-for="CompanyCode" asp-items="Model.Companies" />  
+                    <nop-select asp-for="CompanyCode" asp-items="Model.Companies" />
                     <span asp-validation-for="CompanyCode"></span>
                 </div>
             </div>
@@ -102,14 +102,16 @@
                         cache: false,
                         type: "GET",
                         url: "@(Url.Action("GetStatesByCountryId", "Country"))",
-                        data: { "countryId": selectedItem },
-                        success: function (data) {
+                        data: {
+                            "countryId": selectedItem
+                        },
+                        success: function (data, textStatus, jqXHR) {
                             ddlStates.html('');
                             $.each(data, function (id, option) {
                                 ddlStates.append($('<option></option>').val(option.id).html(option.name));
                             });
                         },
-                        error: function (xhr, ajaxOptions, thrownError) {
+                        error: function (jqXHR, textStatus, errorThrown) {
                             alert('Failed to retrieve states.');
                         }
                     });
@@ -124,7 +126,7 @@
                         <nop-label asp-for="TestAddress.CountryId" />
                     </div>
                     <div class="col-md-9">
-                        <nop-select asp-for="TestAddress.CountryId" asp-items="Model.TestAddress.AvailableCountries"/>
+                        <nop-select asp-for="TestAddress.CountryId" asp-items="Model.TestAddress.AvailableCountries" />
                         <span asp-validation-for="TestAddress.CountryId"></span>
                     </div>
                 </div>
@@ -133,7 +135,7 @@
                         <nop-label asp-for="TestAddress.StateProvinceId" />
                     </div>
                     <div class="col-md-9">
-                        <nop-select asp-for="TestAddress.StateProvinceId" asp-items="Model.TestAddress.AvailableStates"/>
+                        <nop-select asp-for="TestAddress.StateProvinceId" asp-items="Model.TestAddress.AvailableStates" />
                         <span asp-validation-for="TestAddress.StateProvinceId"></span>
                     </div>
                 </div>

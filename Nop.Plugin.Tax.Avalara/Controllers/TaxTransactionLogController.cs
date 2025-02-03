@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Nop.Core.Html;
@@ -7,20 +8,23 @@ using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Customers;
 using Nop.Services.Helpers;
 using Nop.Services.Localization;
+using Nop.Services.Messages;
 using Nop.Services.Security;
 using Nop.Web.Areas.Admin.Controllers;
+using Nop.Web.Framework.Models.Extensions;
 
 namespace Nop.Plugin.Tax.Avalara.Controllers
 {
-    public partial class TaxTransactionLogController : BaseAdminController
+    public class TaxTransactionLogController : BaseAdminController
     {
         #region Fields
 
         private readonly ICustomerService _customerService;
         private readonly IDateTimeHelper _dateTimeHelper;
         private readonly ILocalizationService _localizationService;
+        private readonly INotificationService _notificationService;
         private readonly IPermissionService _permissionService;
-        private readonly ITaxTransactionLogService _taxTransactionLogService;
+        private readonly TaxTransactionLogService _taxTransactionLogService;
 
         #endregion
 
@@ -29,14 +33,16 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         public TaxTransactionLogController(ICustomerService customerService,
             IDateTimeHelper dateTimeHelper,
             ILocalizationService localizationService,
+            INotificationService notificationService,
             IPermissionService permissionService,
-            ITaxTransactionLogService taxTransactionLogService)
+            TaxTransactionLogService taxTransactionLogService)
         {
-            this._customerService = customerService;
-            this._dateTimeHelper = dateTimeHelper;
-            this._localizationService = localizationService;
-            this._permissionService = permissionService;
-            this._taxTransactionLogService = taxTransactionLogService;
+            _customerService = customerService;
+            _dateTimeHelper = dateTimeHelper;
+            _localizationService = localizationService;
+            _notificationService = notificationService;
+            _permissionService = permissionService;
+            _taxTransactionLogService = taxTransactionLogService;
         }
 
         #endregion
@@ -47,7 +53,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         public virtual IActionResult LogList(TaxTransactionLogSearchModel searchModel)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
-                return AccessDeniedKendoGridJson();
+                return AccessDeniedDataTablesJson();
 
             //prepare filter parameters
             var createdFromValue = searchModel.CreatedFrom.HasValue
@@ -60,31 +66,31 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 createdToUtc: createdToValue, pageIndex: searchModel.Page - 1, pageSize: searchModel.PageSize);
 
             //prepare grid model
-            var model = new TaxTransactionLogListModel
+            var model = new TaxTransactionLogListModel().PrepareToGrid(searchModel, taxtransactionLog, () =>
             {
-                //fill in model values from the entity
-                Data = taxtransactionLog.Select(logItem => new TaxTransactionLogModel
+                return taxtransactionLog.Select(logItem => new TaxTransactionLogModel
                 {
                     Id = logItem.Id,
                     StatusCode = logItem.StatusCode,
                     Url = logItem.Url,
                     CustomerId = logItem.CustomerId,
                     CreatedDate = _dateTimeHelper.ConvertToUserTime(logItem.CreatedDateUtc, DateTimeKind.Utc)
-                }),
-                Total = taxtransactionLog.TotalCount
-            };
+                });
+            });
 
             return Json(model);
         }
 
-        public virtual IActionResult ClearAll()
+        [HttpPost]
+        public virtual IActionResult DeleteSelected(ICollection<int> selectedIds)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
 
-            _taxTransactionLogService.ClearTaxTransactionLog();
+            if (selectedIds != null)
+                _taxTransactionLogService.DeleteTaxTransactionLog(selectedIds.ToArray());
 
-            return Json(new { result = true });
+            return Json(new { Result = true });
         }
 
         public virtual IActionResult View(int id)
@@ -123,7 +129,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             if (logItem != null)
             {
                 _taxTransactionLogService.DeleteTaxTransactionLog(logItem);
-                SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Log.Deleted"));
+                _notificationService.SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Log.Deleted"));
             }
 
             return RedirectToAction("Configure", "AvalaraTax");

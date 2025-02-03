@@ -1,21 +1,20 @@
 ﻿using System;
 using System.Linq;
-using Nop.Core;
 using Nop.Core.Caching;
-using Nop.Core.Domain.Tax;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Common;
+using Nop.Services.Localization;
 using Nop.Services.Tax;
 using Nop.Web.Areas.Admin.Factories;
 using Nop.Web.Areas.Admin.Models.Tax;
-using Nop.Web.Framework.Extensions;
+using Nop.Web.Framework.Models.Extensions;
 
 namespace Nop.Plugin.Tax.Avalara.Factories
 {
     /// <summary>
     /// Represents overridden tax model factory
     /// </summary>
-    public partial class OverriddenTaxModelFactory : TaxModelFactory
+    public class OverriddenTaxModelFactory : TaxModelFactory
     {
         #region Fields
 
@@ -23,8 +22,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly IStaticCacheManager _cacheManager;
         private readonly ITaxCategoryService _taxCategoryService;
-        private readonly ITaxService _taxService;
-        private readonly IWorkContext _workContext;
+        private readonly ITaxPluginManager _taxPluginManager;
 
         #endregion
 
@@ -32,20 +30,18 @@ namespace Nop.Plugin.Tax.Avalara.Factories
 
         public OverriddenTaxModelFactory(AvalaraTaxManager avalaraTaxManager,
             IGenericAttributeService genericAttributeService,
+            ILocalizationService localizationService,
             IStaticCacheManager cacheManager,
             ITaxCategoryService taxCategoryService,
-            ITaxService taxService,
-            IWorkContext workContext,
-            TaxSettings taxSettings) : base(taxCategoryService,
-                taxService,
-                taxSettings)
+            ITaxPluginManager taxPluginManager) : base(localizationService,
+                taxCategoryService,
+                taxPluginManager)
         {
-            this._avalaraTaxManager = avalaraTaxManager;
-            this._genericAttributeService = genericAttributeService;
-            this._cacheManager = cacheManager;
-            this._taxCategoryService = taxCategoryService;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _avalaraTaxManager = avalaraTaxManager;
+            _genericAttributeService = genericAttributeService;
+            _cacheManager = cacheManager;
+            _taxCategoryService = taxCategoryService;
+            _taxPluginManager = taxPluginManager;
         }
 
         #endregion
@@ -60,14 +56,14 @@ namespace Nop.Plugin.Tax.Avalara.Factories
         public override TaxCategoryListModel PrepareTaxCategoryListModel(TaxCategorySearchModel searchModel)
         {
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return base.PrepareTaxCategoryListModel(searchModel);
 
             if (searchModel == null)
                 throw new ArgumentNullException(nameof(searchModel));
 
             //get tax categories
-            var taxCategories = _taxCategoryService.GetAllTaxCategories();
+            var taxCategories = _taxCategoryService.GetAllTaxCategories().ToPagedList(searchModel);
 
             //get tax types and define the default value
             var taxTypes = _cacheManager.Get(AvalaraTaxDefaults.TaxCodeTypesCacheKey, () => _avalaraTaxManager.GetTaxCodeTypes())
@@ -77,9 +73,10 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 ?? taxTypes?.FirstOrDefault();
 
             //prepare grid model
-            var model = new TaxCategoryListModel
+            var model = new Models.Tax.TaxCategoryListModel().PrepareToGrid(searchModel, taxCategories, () =>
             {
-                Data = taxCategories.PaginationByRequestModel(searchModel).Select(taxCategory =>
+                //fill in model values from the entity
+                return taxCategories.Select(taxCategory =>
                 {
                     //fill in model values from the entity
                     var taxCategoryModel = new Models.Tax.TaxCategoryModel
@@ -99,11 +96,10 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                         .GetAttribute<string>(taxCategory, AvalaraTaxDefaults.TaxCodeDescriptionAttribute) ?? string.Empty;
 
                     return taxCategoryModel;
-                }),
-                Total = taxCategories.Count
-            };
+                });
+            });
 
-            return model;
+            return new TaxCategoryListModel { Data = model.Data, Draw = model.Draw, RecordsTotal = model.RecordsTotal, RecordsFiltered = model.RecordsFiltered };
         }
 
         #endregion

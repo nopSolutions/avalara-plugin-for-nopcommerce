@@ -10,7 +10,6 @@ using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Tax;
-using Nop.Core.Plugins;
 using Nop.Plugin.Tax.Avalara.Data;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Services;
@@ -22,6 +21,7 @@ using Nop.Services.Customers;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Orders;
+using Nop.Services.Plugins;
 using Nop.Services.Tax;
 using Nop.Web.Framework.Infrastructure;
 
@@ -48,7 +48,7 @@ namespace Nop.Plugin.Tax.Avalara
         private readonly ISettingService _settingService;
         private readonly IStaticCacheManager _cacheManager;
         private readonly ITaxCategoryService _taxCategoryService;
-        private readonly ITaxService _taxService;
+        private readonly ITaxPluginManager _taxPluginManager;
         private readonly IWebHelper _webHelper;
         private readonly ShippingSettings _shippingSettings;
         private readonly TaxSettings _taxSettings;
@@ -73,33 +73,33 @@ namespace Nop.Plugin.Tax.Avalara
             ISettingService settingService,
             IStaticCacheManager cacheManager,
             ITaxCategoryService taxCategoryService,
-            ITaxService taxService,
+            ITaxPluginManager taxPluginManager,
             IWebHelper webHelper,
             ShippingSettings shippingSettings,
             TaxSettings taxSettings,
             TaxTransactionLogObjectContext objectContext,
             WidgetSettings widgetSettings)
         {
-            this._avalaraTaxManager = avalaraTaxManager;
-            this._avalaraTaxSettings = avalaraTaxSettings;
-            this._addressService = addressService;
-            this._checkoutAttributeParser = checkoutAttributeParser;
-            this._checkoutAttributeService = checkoutAttributeService;
-            this._countryService = countryService;
-            this._customerService = customerService;
-            this._genericAttributeService = genericAttributeService;
-            this._geoLookupService = geoLookupService;
-            this._localizationService = localizationService;
-            this._productService = productService;
-            this._settingService = settingService;
-            this._cacheManager = cacheManager;
-            this._taxCategoryService = taxCategoryService;
-            this._taxService = taxService;
-            this._webHelper = webHelper;
-            this._shippingSettings = shippingSettings;
-            this._taxSettings = taxSettings;
-            this._objectContext = objectContext;
-            this._widgetSettings = widgetSettings;
+            _avalaraTaxManager = avalaraTaxManager;
+            _avalaraTaxSettings = avalaraTaxSettings;
+            _addressService = addressService;
+            _checkoutAttributeParser = checkoutAttributeParser;
+            _checkoutAttributeService = checkoutAttributeService;
+            _countryService = countryService;
+            _customerService = customerService;
+            _genericAttributeService = genericAttributeService;
+            _geoLookupService = geoLookupService;
+            _localizationService = localizationService;
+            _productService = productService;
+            _settingService = settingService;
+            _cacheManager = cacheManager;
+            _taxCategoryService = taxCategoryService;
+            _taxPluginManager = taxPluginManager;
+            _webHelper = webHelper;
+            _shippingSettings = shippingSettings;
+            _taxSettings = taxSettings;
+            _objectContext = objectContext;
+            _widgetSettings = widgetSettings;
         }
 
         #endregion
@@ -496,8 +496,8 @@ namespace Nop.Plugin.Tax.Avalara
             var cacheKey = string.Format(AvalaraTaxDefaults.TaxRateCacheKey,
                 calculateTaxRequest.Address.Address1,
                 calculateTaxRequest.Address.City,
-                calculateTaxRequest.Address.StateProvince?.Id ?? 0,
-                calculateTaxRequest.Address.Country?.Id ?? 0,
+                calculateTaxRequest.Address.StateProvinceId ?? 0,
+                calculateTaxRequest.Address.CountryId ?? 0,
                 calculateTaxRequest.Address.ZipPostalCode);
 
             //we don't use standard way _cacheManager.Get() due the need write errors to CalculateTaxResult
@@ -505,7 +505,8 @@ namespace Nop.Plugin.Tax.Avalara
                 return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey, () => default(decimal)) };
 
             //get estimated tax
-            var totalTax = CreateEstimatedTaxTransaction(calculateTaxRequest.Address, calculateTaxRequest.Customer?.Id.ToString())?.totalTax;
+            var address = _addressService.GetAddressById(calculateTaxRequest.Address.AddressId);
+            var totalTax = CreateEstimatedTaxTransaction(address, calculateTaxRequest.Customer?.Id.ToString())?.totalTax;
             if (!totalTax.HasValue)
                 return new CalculateTaxResult { Errors = new[] { "No response from the service" }.ToList() };
 
@@ -608,9 +609,9 @@ namespace Nop.Plugin.Tax.Avalara
         {
             return new List<string>
             {
-                AdminWidgetZones.CustomerDetailsInfoTop,
+                AdminWidgetZones.CustomerDetailsBlock,
                 AdminWidgetZones.CustomerRoleDetailsTop,
-                AdminWidgetZones.TaxSettingsTop,
+                AdminWidgetZones.TaxSettingsDetailsBlock,
                 AdminWidgetZones.ProductListButtons,
                 AdminWidgetZones.TaxCategoryListButtons,
                 PublicWidgetZones.CheckoutConfirmTop,
@@ -625,25 +626,25 @@ namespace Nop.Plugin.Tax.Avalara
         /// <returns>View component name</returns>
         public string GetWidgetViewComponentName(string widgetZone)
         {
-            if (widgetZone.Equals(AdminWidgetZones.CustomerDetailsInfoTop) ||
+            if (widgetZone.Equals(AdminWidgetZones.CustomerDetailsBlock) ||
                 widgetZone.Equals(AdminWidgetZones.CustomerRoleDetailsTop))
             {
-                return AvalaraTaxDefaults.EntityUseCodeViewComponentName;
+                return AvalaraTaxDefaults.ENTITY_USE_CODE_VIEW_COMPONENT_NAME;
             }
 
-            if (widgetZone.Equals(AdminWidgetZones.TaxSettingsTop))
-                return AvalaraTaxDefaults.TaxOriginViewComponentName;
+            if (widgetZone.Equals(AdminWidgetZones.TaxSettingsDetailsBlock))
+                return AvalaraTaxDefaults.TAX_ORIGIN_VIEW_COMPONENT_NAME;
 
             if (widgetZone.Equals(AdminWidgetZones.ProductListButtons))
-                return AvalaraTaxDefaults.ExportItemsViewComponentName;
+                return AvalaraTaxDefaults.EXPORT_ITEMS_VIEW_COMPONENT_NAME;
 
             if (widgetZone.Equals(AdminWidgetZones.TaxCategoryListButtons))
-                return AvalaraTaxDefaults.TaxCodesViewComponentName;
+                return AvalaraTaxDefaults.TAX_CODES_VIEW_COMPONENT_NAME;
 
             if (widgetZone.Equals(PublicWidgetZones.CheckoutConfirmTop) ||
                 widgetZone.Equals(PublicWidgetZones.OpCheckoutConfirmTop))
             {
-                return AvalaraTaxDefaults.AddressValidationViewComponentName;
+                return AvalaraTaxDefaults.ADDRESS_VALIDATION_VIEW_COMPONENT_NAME;
             }
 
             return null;
@@ -665,6 +666,12 @@ namespace Nop.Plugin.Tax.Avalara
                 CommitTransactions = true,
                 TaxOriginAddressType = TaxOriginAddressType.ShippingOrigin
             });
+
+            if (!_widgetSettings.ActiveWidgetSystemNames.Contains(AvalaraTaxDefaults.SystemName))
+            {
+                _widgetSettings.ActiveWidgetSystemNames.Add(AvalaraTaxDefaults.SystemName);
+                _settingService.SaveSetting(_widgetSettings);
+            }
 
             //locales
             _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create", "Create request");
@@ -694,6 +701,7 @@ namespace Nop.Plugin.Tax.Avalara
             _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint", "Specify Avalara account license key.");
             _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription", "Description");
             _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType", "Type");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType.Hint", "Choose a tax code type.");
             _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType", "Tax origin address");
             _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint", "Choose which address will be used as the origin for tax requests to Avalara services.");
             _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox", "Use sandbox");
@@ -778,7 +786,7 @@ namespace Nop.Plugin.Tax.Avalara
             }
 
             //settings            
-            _taxSettings.ActiveTaxProviderSystemName = _taxService.LoadAllTaxProviders()
+            _taxSettings.ActiveTaxProviderSystemName = _taxPluginManager.LoadAllPlugins()
                 .FirstOrDefault(taxProvider => !taxProvider.PluginDescriptor.SystemName.Equals(AvalaraTaxDefaults.SystemName))
                 ?.PluginDescriptor.SystemName;
             _settingService.SaveSetting(_taxSettings);
@@ -814,6 +822,7 @@ namespace Nop.Plugin.Tax.Avalara
             _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint");
             _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription");
             _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType.Hint");
             _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType");
             _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint");
             _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox");
@@ -869,5 +878,10 @@ namespace Nop.Plugin.Tax.Avalara
         }
 
         #endregion
+
+        /// <summary>
+        /// Gets a value indicating whether to hide this plugin on the widget list page in the admin area
+        /// </summary>
+        public bool HideInWidgetList => true;
     }
 }

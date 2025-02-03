@@ -8,7 +8,7 @@ namespace Nop.Plugin.Tax.Avalara.Data
     /// <summary>
     /// Represents the tax transaction log mapping class
     /// </summary>
-    public partial class TaxTransactionLogMap : NopEntityTypeConfiguration<TaxTransactionLog>
+    public class TaxTransactionLogMap : NopEntityTypeConfiguration<TaxTransactionLog>
     {
         #region Methods
 

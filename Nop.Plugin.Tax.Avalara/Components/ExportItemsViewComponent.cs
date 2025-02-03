@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Nop.Core;
 using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Framework.Components;
@@ -10,26 +9,23 @@ namespace Nop.Plugin.Tax.Avalara.Components
     /// <summary>
     /// Represents a view component to render the button on a product list view
     /// </summary>
-    [ViewComponent(Name = AvalaraTaxDefaults.ExportItemsViewComponentName)]
+    [ViewComponent(Name = AvalaraTaxDefaults.EXPORT_ITEMS_VIEW_COMPONENT_NAME)]
     public class ExportItemsViewComponent : NopViewComponent
     {
         #region Fields
 
         private readonly IPermissionService _permissionService;
-        private readonly ITaxService _taxService;
-        private readonly IWorkContext _workContext;
+        private readonly ITaxPluginManager _taxPluginManager;
 
         #endregion
 
         #region Ctor
 
         public ExportItemsViewComponent(IPermissionService permissionService,
-            ITaxService taxService,
-            IWorkContext workContext)
+            ITaxPluginManager taxPluginManager)
         {
-            this._permissionService = permissionService;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _permissionService = permissionService;
+            _taxPluginManager = taxPluginManager;
         }
 
         #endregion
@@ -48,7 +44,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone

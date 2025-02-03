@@ -7,8 +7,10 @@ namespace Nop.Plugin.Tax.Avalara.Models.Log
     /// <summary>
     /// Represents a tax transaction log model
     /// </summary>
-    public partial class TaxTransactionLogModel : BaseNopEntityModel
+    public class TaxTransactionLogModel : BaseNopEntityModel
     {
+        #region Properties
+
         [NopResourceDisplayName("Plugins.Tax.Avalara.Log.StatusCode")]
         public int StatusCode { get; set; }
 
@@ -27,5 +29,7 @@ namespace Nop.Plugin.Tax.Avalara.Models.Log
 
         [NopResourceDisplayName("Plugins.Tax.Avalara.Log.CreatedDate")]
         public DateTime CreatedDate { get; set; }
+
+        #endregion
     }
 }

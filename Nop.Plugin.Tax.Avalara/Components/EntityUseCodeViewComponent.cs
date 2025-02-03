@@ -26,7 +26,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
     /// <summary>
     /// Represents a view component to render an additional field on customer details, customer role details, product details, checkout attribute details views
     /// </summary>
-    [ViewComponent(Name = AvalaraTaxDefaults.EntityUseCodeViewComponentName)]
+    [ViewComponent(Name = AvalaraTaxDefaults.ENTITY_USE_CODE_VIEW_COMPONENT_NAME)]
     public class EntityUseCodeViewComponent : NopViewComponent
     {
         #region Fields
@@ -39,8 +39,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
         private readonly IPermissionService _permissionService;
         private readonly IProductService _productService;
         private readonly IStaticCacheManager _cacheManager;
-        private readonly ITaxService _taxService;
-        private readonly IWorkContext _workContext;
+        private readonly ITaxPluginManager _taxPluginManager;
 
         #endregion
 
@@ -54,19 +53,17 @@ namespace Nop.Plugin.Tax.Avalara.Components
             IPermissionService permissionService,
             IProductService productService,
             IStaticCacheManager cacheManager,
-            ITaxService taxService,
-            IWorkContext workContext)
+            ITaxPluginManager taxPluginManager)
         {
-            this._avalaraTaxManager = avalaraTaxManager;
-            this._checkoutAttributeService = checkoutAttributeService;
-            this._customerService = customerService;
-            this._genericAttributeService = genericAttributeService;
-            this._localizationService = localizationService;
-            this._permissionService = permissionService;
-            this._productService = productService;
-            this._cacheManager = cacheManager;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _avalaraTaxManager = avalaraTaxManager;
+            _checkoutAttributeService = checkoutAttributeService;
+            _customerService = customerService;
+            _genericAttributeService = genericAttributeService;
+            _localizationService = localizationService;
+            _permissionService = permissionService;
+            _productService = productService;
+            _cacheManager = cacheManager;
+            _taxPluginManager = taxPluginManager;
         }
 
         #endregion
@@ -89,14 +86,14 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone
-            if (!widgetZone.Equals(AdminWidgetZones.CustomerDetailsInfoTop) &&
+            if (!widgetZone.Equals(AdminWidgetZones.CustomerDetailsBlock) &&
                 !widgetZone.Equals(AdminWidgetZones.CustomerRoleDetailsTop) &&
-                !widgetZone.Equals(AdminWidgetZones.ProductDetailsInfoColumnLeftTop) &&
-                !widgetZone.Equals(AdminWidgetZones.CheckoutAttributeDetailsInfoTop))
+                !widgetZone.Equals(AdminWidgetZones.ProductDetailsBlock) &&
+                !widgetZone.Equals(AdminWidgetZones.CheckoutAttributeDetailsBlock))
             {
                 return Content(string.Empty);
             }
@@ -126,7 +123,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
 
             //get entity by the model identifier
             BaseEntity entity = null;
-            if (widgetZone.Equals(AdminWidgetZones.CustomerDetailsInfoTop))
+            if (widgetZone.Equals(AdminWidgetZones.CustomerDetailsBlock))
             {
                 model.PrecedingElementId = nameof(CustomerModel.IsTaxExempt);
                 entity = _customerService.GetCustomerById(entityModel.Id);
@@ -138,13 +135,13 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 entity = _customerService.GetCustomerRoleById(entityModel.Id);
             }
 
-            if (widgetZone.Equals(AdminWidgetZones.ProductDetailsInfoColumnLeftTop))
+            if (widgetZone.Equals(AdminWidgetZones.ProductDetailsBlock))
             {
                 model.PrecedingElementId = nameof(ProductModel.IsTaxExempt);
                 entity = _productService.GetProductById(entityModel.Id);
             }
 
-            if (widgetZone.Equals(AdminWidgetZones.CheckoutAttributeDetailsInfoTop))
+            if (widgetZone.Equals(AdminWidgetZones.CheckoutAttributeDetailsBlock))
             {
                 model.PrecedingElementId = nameof(CheckoutAttributeModel.IsTaxExempt);
                 entity = _checkoutAttributeService.GetCheckoutAttributeById(entityModel.Id);

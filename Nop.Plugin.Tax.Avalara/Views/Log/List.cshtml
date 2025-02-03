@@ -1,4 +1,7 @@
-﻿@model Nop.Plugin.Tax.Avalara.Models.Configuration.ConfigurationModel
+﻿@model ConfigurationModel
+
+@using Nop.Plugin.Tax.Avalara.Models.Configuration
+@using Nop.Plugin.Tax.Avalara.Models.Log
 
 <div class="panel-group">
     <div class="panel panel-default">
@@ -36,94 +39,88 @@
 
     <div class="panel panel-default">
         <div class="panel-body">
-            <div id="log-grid"></div>
-            
+            @await Html.PartialAsync("Table", new DataTablesModel
+            {
+                Name = "log-grid",
+                UrlRead = new DataUrl("LogList", "TaxTransactionLog", null),
+                SearchButtonId = "search-log",
+                Length = Model.TaxTransactionLogSearchModel.PageSize,
+                LengthMenu = Model.TaxTransactionLogSearchModel.AvailablePageSizes,
+                Filters = new List<FilterParameter>
+                {
+                    new FilterParameter(nameof(Model.TaxTransactionLogSearchModel.CreatedFrom), nameof(Model.TaxTransactionLogSearchModel)),
+                    new FilterParameter(nameof(Model.TaxTransactionLogSearchModel.CreatedTo), nameof(Model.TaxTransactionLogSearchModel))
+                },
+                ColumnCollection = new List<ColumnProperty>
+                {
+                    new ColumnProperty(nameof(TaxTransactionLogModel.Id))
+                    {
+                        IsMasterCheckBox = true,
+                        Render = new RenderCheckBox("checkbox_log"),
+                        ClassName =  NopColumnClassDefaults.CenterAll,
+                        Width = "50",
+                    },
+                    new ColumnProperty(nameof(TaxTransactionLogModel.StatusCode))
+                    {
+                        Title = T("Plugins.Tax.Avalara.Log.StatusCode").Text,
+                        Width = "100"
+                    },
+                    new ColumnProperty(nameof(TaxTransactionLogModel.Url))
+                    {
+                        Title = T("Plugins.Tax.Avalara.Log.Url").Text,
+                        Width = "200"
+                    },
+                    new ColumnProperty(nameof(TaxTransactionLogModel.CreatedDate))
+                    {
+                        Title = T("Plugins.Tax.Avalara.Log.CreatedDate").Text,
+                        Width = "200",
+                        Render = new RenderDate()
+                    },
+                    new ColumnProperty(nameof(TaxTransactionLogModel.Id))
+                    {
+                        Title = T("Admin.Common.View").Text,
+                        Width = "100",
+                        ClassName = NopColumnClassDefaults.Button,
+                        Render = new RenderButtonView(new DataUrl("~/Admin/TaxTransactionLog/View/"))
+                    }
+                }
+            })
+
             <script>
                 $(document).ready(function() {
-                    $("#log-grid").kendoGrid({
-                        dataSource: {
-                            type: "json",
-                            transport: {
-                                read: {
-                                    url: "@Html.Raw(Url.Action("LogList", "TaxTransactionLog"))",
-                                    type: "POST",
-                                    dataType: "json",
-                                    data: function() {
-                                        var data = {
-                                            CreatedFrom: $('#@Html.IdFor(model => model.TaxTransactionLogSearchModel.CreatedFrom)').val(),
-                                            CreatedTo: $('#@Html.IdFor(model => model.TaxTransactionLogSearchModel.CreatedTo)').val(),
-                                        };
-                                        addAntiForgeryToken(data);
-                                        return data;
-                                    }
-                                }
+                    //"delete selected" button
+                    $("#delete-selected-action-confirmation-submit-button").bind("click", function () {
+                        var postData = {
+                            selectedIds: selectedIds
+                        };
+                        addAntiForgeryToken(postData);
+                        $.ajax({
+                            cache: false,
+                            type: "POST",
+                            url: "@(Url.Action("DeleteSelected", "TaxTransactionLog"))",
+                            data: postData,
+                            traditional: true,                            
+                            error: function (jqXHR, textStatus, errorThrown) {
+                                $('#deleteSelectedFailed-info').text(errorThrown);
+                                $("#deleteSelectedFailed").click();
                             },
-                            schema: {
-                                data: "Data",
-                                total: "Total",
-                                errors: "Errors"
-                            },
-                            error: function(e) {
-                                display_kendoui_grid_error(e);
-                                this.cancelChanges();
-                            },
-                            pageSize: @(Model.TaxTransactionLogSearchModel.PageSize),
-                            serverPaging: true,
-                            serverFiltering: true,
-                            serverSorting: true
-                        },
-                        pageable: {
-                            refresh: true,
-                            pageSizes: [@(Model.TaxTransactionLogSearchModel.AvailablePageSizes)],
-                            @await Html.PartialAsync("_GridPagerMessages")
-                        },
-                        toolbar: [{
-                            template: '<a onclick="clearLog()" class="btn bg-red"><i class="fa fa-trash-o"></i>@T("Plugins.Tax.Avalara.Log.ClearLog")</a>'
-                        }],
-                        scrollable: false,
-                        columns: [
-                        {
-                            field: "StatusCode",
-                            title: "@T("Plugins.Tax.Avalara.Log.StatusCode")",
-                        }, {
-                            field: "Url",
-                            title: "@T("Plugins.Tax.Avalara.Log.Url")",
-                        }, {
-                            field: "CreatedDate",
-                            title: "@T("Plugins.Tax.Avalara.Log.CreatedDate")",
-                            width: 200,
-                            type: "date",
-                            format: "{0:G}"
-                        }, {
-                            field: "Id",
-                            title: "@T("Admin.Common.View")",
-                            width: 50,
-                            headerAttributes: { style: "text-align:center" },
-                            attributes: { style: "text-align:center" },
-                            template: '<a class="btn btn-default" href="@(Url.Action("View", "TaxTransactionLog"))/#=Id#"><i class="fa fa-eye"></i>@T("Admin.Common.View")</a>'
-                        }
-                        ]
-                    });
-
-                     $('#search-log').click(function() {
-                        var grid = $('#log-grid').data('kendoGrid');
-                        grid.dataSource.page(1);
+                            complete: function (jqXHR, textStatus) {
+                                updateTable('#log-grid');
+                            }
+                        });
+                        $('#delete-selected-action-confirmation').modal('toggle');
                         return false;
                     });
                 });
-
-                function clearLog() {
-                    $.ajax({
-                        cache: false,
-                        type: "GET",
-                        url: '@(Url.Action("ClearAll", "TaxTransactionLog"))',
-                        success: function () {
-                            var grid = $('#log-grid').data('kendoGrid');
-                            grid.dataSource.page(1);
-                        }
-                    });
-                }
             </script>
+        </div>
+        <div class="panel-footer">
+            <button type="button" id="delete-selected" class="btn bg-red">
+                <i class="fa fa-trash-o"></i>
+                @T("Admin.System.Log.DeleteSelected")
+            </button>
+            <nop-action-confirmation asp-button-id="delete-selected" />
         </div>
     </div>
 </div>
+<nop-alert asp-alert-id="deleteSelectedFailed" />

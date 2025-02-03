@@ -8,25 +8,23 @@ using Nop.Core.Domain.Directory;
 using Nop.Plugin.Tax.Avalara.Models.Configuration;
 using Nop.Plugin.Tax.Avalara.Models.Log;
 using Nop.Plugin.Tax.Avalara.Services;
+using Nop.Services.Common;
 using Nop.Services.Configuration;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
+using Nop.Services.Messages;
 using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Areas.Admin.Models.Common;
 using Nop.Web.Framework;
 using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Mvc.Filters;
-using Nop.Web.Framework.Security;
 
 namespace Nop.Plugin.Tax.Avalara.Controllers
 {
     [Area(AreaNames.Admin)]
     [AuthorizeAdmin]
-    [ValidateVendor]
     [AdminAntiForgery]
-    [ValidateIpAddress]
-    [HttpsRequirement(SslRequirement.Yes)]
     public class AvalaraTaxController : BasePluginController
     {
         #region Fields
@@ -36,11 +34,13 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         private readonly CurrencySettings _currencySettings;
         private readonly ICountryService _countryService;
         private readonly ICurrencyService _currencyService;
+        private readonly IGenericAttributeService _genericAttributeService;
         private readonly ILocalizationService _localizationService;
+        private readonly INotificationService _notificationService;
         private readonly IPermissionService _permissionService;
         private readonly ISettingService _settingService;
         private readonly IStateProvinceService _stateProvinceService;
-        private readonly ITaxService _taxService;
+        private readonly ITaxPluginManager _taxPluginManager;
         private readonly IWorkContext _workContext;
 
         #endregion
@@ -52,24 +52,28 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             CurrencySettings currencySettings,
             ICountryService countryService,
             ICurrencyService currencyService,
+            IGenericAttributeService genericAttributeService,
             ILocalizationService localizationService,
+            INotificationService notificationService,
             IPermissionService permissionService,
             ISettingService settingService,
             IStateProvinceService stateProvinceService,
-            ITaxService taxService,
+            ITaxPluginManager taxPluginManager,
             IWorkContext workContext)
         {
-            this._avalaraTaxManager = avalaraTaxManager;
-            this._avalaraTaxSettings = avalaraTaxSettings;
-            this._currencySettings = currencySettings;
-            this._countryService = countryService;
-            this._currencyService = currencyService;
-            this._localizationService = localizationService;
-            this._permissionService = permissionService;
-            this._settingService = settingService;
-            this._stateProvinceService = stateProvinceService;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _avalaraTaxManager = avalaraTaxManager;
+            _avalaraTaxSettings = avalaraTaxSettings;
+            _currencySettings = currencySettings;
+            _countryService = countryService;
+            _currencyService = currencyService;
+            _genericAttributeService = genericAttributeService;
+            _localizationService = localizationService;
+            _notificationService = notificationService;
+            _permissionService = permissionService;
+            _settingService = settingService;
+            _stateProvinceService = stateProvinceService;
+            _taxPluginManager = taxPluginManager;
+            _workContext = workContext;
         }
 
         #endregion
@@ -142,6 +146,9 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             //prepare tax transaction log model
             PrepareLogModel(model.TaxTransactionLogSearchModel);
 
+            model.HideGeneralBlock = _genericAttributeService.GetAttribute<bool>(_workContext.CurrentCustomer, AvalaraTaxDefaults.HideGeneralBlock);
+            model.HideLogBlock = _genericAttributeService.GetAttribute<bool>(_workContext.CurrentCustomer, AvalaraTaxDefaults.HideLogBlock);
+
             //get account company list (only active)
             var activeCompanies = _avalaraTaxManager.GetAccountCompanies(true);
             if (activeCompanies?.Any() ?? false)
@@ -173,7 +180,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             var primaryCurrency = _currencyService.GetCurrencyById(_currencySettings.PrimaryStoreCurrencyId);
             var selectedCompany = activeCompanies?.FirstOrDefault(company => company.companyCode.Equals(defaultCompanyCode));
             if (!selectedCompany?.baseCurrencyCode?.Equals(primaryCurrency?.CurrencyCode, StringComparison.InvariantCultureIgnoreCase) ?? false)
-                WarningNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning"));
+                _notificationService.WarningNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning"));
 
             return View("~/Plugins/Tax.Avalara/Views/Configuration/Configure.cshtml", model);
         }
@@ -197,7 +204,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             _avalaraTaxSettings.ValidateAddress = model.ValidateAddress;
             _settingService.SaveSetting(_avalaraTaxSettings);
 
-            SuccessNotification(_localizationService.GetResource("Admin.Plugins.Saved"));
+            _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Plugins.Saved"));
 
             return Configure();
         }
@@ -217,9 +224,9 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
             //display results
             if (result?.authenticated ?? false)
-                SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.VerifyCredentials.Verified"));
+                _notificationService.SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.VerifyCredentials.Verified"));
             else
-                ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.VerifyCredentials.Declined"));
+                _notificationService.ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.VerifyCredentials.Declined"));
 
             return Configure();
         }
@@ -234,7 +241,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             if (!ModelState.IsValid)
                 return Configure();
 
-            var taxProvider = _taxService.LoadTaxProviderBySystemName(AvalaraTaxDefaults.SystemName) as AvalaraTaxProvider;
+            var taxProvider = _taxPluginManager.LoadPluginBySystemName(AvalaraTaxDefaults.SystemName) as AvalaraTaxProvider;
 
             //get result
             var transaction = taxProvider.CreateEstimatedTaxTransaction(new Address
@@ -255,15 +262,17 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                     model.TestTaxResult = transaction.summary.Aggregate(model.TestTaxResult, (resultString, rate) =>
                         $"{resultString}Jurisdiction: {rate?.jurisName}, Tax rate: {((rate?.rate ?? 0) * 100):0.00}% {Environment.NewLine}");
                 }
-                SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TestTax.Success"));
+                _notificationService.SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TestTax.Success"));
             }
             else
-                ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TestTax.Error"));
+                _notificationService.ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TestTax.Error"));
 
             //prepare model
             model.IsConfigured = IsConfigured();
             PrepareAddress(model.TestAddress);
             PrepareLogModel(model.TaxTransactionLogSearchModel);
+            model.HideGeneralBlock = _genericAttributeService.GetAttribute<bool>(_workContext.CurrentCustomer, AvalaraTaxDefaults.HideGeneralBlock);
+            model.HideLogBlock = _genericAttributeService.GetAttribute<bool>(_workContext.CurrentCustomer, AvalaraTaxDefaults.HideLogBlock);
 
             return View("~/Plugins/Tax.Avalara/Views/Configuration/Configure.cshtml", model);
         }

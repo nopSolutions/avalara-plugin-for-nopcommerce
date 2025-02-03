@@ -11,7 +11,7 @@ namespace Nop.Plugin.Tax.Avalara.Domain
 
         public TaxDetails()
         {
-            this.TaxRates = new Dictionary<decimal, decimal>();
+            TaxRates = new Dictionary<decimal, decimal>();
         }
 
         #endregion

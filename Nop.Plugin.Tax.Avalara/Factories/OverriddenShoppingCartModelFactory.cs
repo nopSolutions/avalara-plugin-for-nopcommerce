@@ -50,9 +50,11 @@ namespace Nop.Plugin.Tax.Avalara.Factories
         private readonly IPaymentService _paymentService;
         private readonly IPriceCalculationService _priceCalculationService;
         private readonly IPriceFormatter _priceFormatter;
+        private readonly IShippingPluginManager _shippingPluginManager;
         private readonly IShoppingCartService _shoppingCartService;
         private readonly IStateProvinceService _stateProvinceService;
         private readonly IStoreContext _storeContext;
+        private readonly ITaxPluginManager _taxPluginManager;
         private readonly ITaxService _taxService;
         private readonly IWorkContext _workContext;
         private readonly RewardPointsSettings _rewardPointsSettings;
@@ -83,6 +85,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
             ILocalizationService localizationService,
             IOrderProcessingService orderProcessingService,
             IOrderTotalCalculationService orderTotalCalculationService,
+            IPaymentPluginManager paymentPluginManager,
             IPaymentService paymentService,
             IPermissionService permissionService,
             IPictureService pictureService,
@@ -90,11 +93,13 @@ namespace Nop.Plugin.Tax.Avalara.Factories
             IPriceFormatter priceFormatter,
             IProductAttributeFormatter productAttributeFormatter,
             IProductService productService,
+            IShippingPluginManager shippingPluginManager,
             IShippingService shippingService,
             IShoppingCartService shoppingCartService,
             IStateProvinceService stateProvinceService,
             IStaticCacheManager cacheManager,
             IStoreContext storeContext,
+            ITaxPluginManager taxPluginManager,
             ITaxService taxService,
             IUrlRecordService urlRecordService,
             IVendorService vendorService,
@@ -126,6 +131,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 localizationService,
                 orderProcessingService,
                 orderTotalCalculationService,
+                paymentPluginManager,
                 paymentService,
                 permissionService,
                 pictureService,
@@ -133,6 +139,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 priceFormatter,
                 productAttributeFormatter,
                 productService,
+                shippingPluginManager,
                 shippingService,
                 shoppingCartService,
                 stateProvinceService,
@@ -151,23 +158,25 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 taxSettings,
                 vendorSettings)
         {
-            this._countryService = countryService;
-            this._currencyService = currencyService;
-            this._genericAttributeService = genericAttributeService;
-            this._giftCardService = giftCardService;
-            this._httpContextAccessor = httpContextAccessor;
-            this._orderTotalCalculationService = orderTotalCalculationService;
-            this._paymentService = paymentService;
-            this._priceCalculationService = priceCalculationService;
-            this._priceFormatter = priceFormatter;
-            this._shoppingCartService = shoppingCartService;
-            this._stateProvinceService = stateProvinceService;
-            this._storeContext = storeContext;
-            this._taxService = taxService;
-            this._workContext = workContext;
-            this._rewardPointsSettings = rewardPointsSettings;
-            this._shippingSettings = shippingSettings;
-            this._taxSettings = taxSettings;
+            _countryService = countryService;
+            _currencyService = currencyService;
+            _genericAttributeService = genericAttributeService;
+            _giftCardService = giftCardService;
+            _httpContextAccessor = httpContextAccessor;
+            _orderTotalCalculationService = orderTotalCalculationService;
+            _paymentService = paymentService;
+            _priceCalculationService = priceCalculationService;
+            _priceFormatter = priceFormatter;
+            _shippingPluginManager = shippingPluginManager;
+            _shoppingCartService = shoppingCartService;
+            _stateProvinceService = stateProvinceService;
+            _storeContext = storeContext;
+            _taxPluginManager = taxPluginManager;
+            _taxService = taxService;
+            _workContext = workContext;
+            _rewardPointsSettings = rewardPointsSettings;
+            _shippingSettings = shippingSettings;
+            _taxSettings = taxSettings;
         }
 
         #endregion
@@ -181,7 +190,10 @@ namespace Nop.Plugin.Tax.Avalara.Factories
         private void PrepareTaxDetails(IList<ShoppingCartItem> cart)
         {
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider taxProvider))
+            var taxProvider = _taxPluginManager
+                .LoadPluginBySystemName(AvalaraTaxDefaults.SystemName, _workContext.CurrentCustomer, _storeContext.CurrentStore.Id)
+                as AvalaraTaxProvider;
+            if (!_taxPluginManager.IsPluginActive(taxProvider))
                 return;
 
             //create dummy order for the tax request
@@ -190,7 +202,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
             //addresses
             order.BillingAddress = _workContext.CurrentCustomer.BillingAddress;
             order.ShippingAddress = _workContext.CurrentCustomer.ShippingAddress;
-            if (_shippingSettings.AllowPickUpInStore)
+            if (_shippingSettings.AllowPickupInStore)
             {
                 var pickupPoint = _genericAttributeService.GetAttribute<PickupPoint>(_workContext.CurrentCustomer,
                     NopCustomerDefaults.SelectedPickupPointAttribute, _storeContext.CurrentStore.Id);
@@ -214,7 +226,8 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 NopCustomerDefaults.CheckoutAttributes, _storeContext.CurrentStore.Id);
 
             //shipping method
-            order.OrderShippingExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, false) ?? 0;
+            var shippingRateComputationMethods = _shippingPluginManager.LoadActivePlugins(_workContext.CurrentCustomer, _storeContext.CurrentStore.Id);
+            order.OrderShippingExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, false, shippingRateComputationMethods) ?? 0;
             order.ShippingMethod = _genericAttributeService.GetAttribute<ShippingOption>(_workContext.CurrentCustomer,
                 NopCustomerDefaults.SelectedShippingOptionAttribute, _storeContext.CurrentStore.Id)?.Name;
 
@@ -293,7 +306,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
 
                 //subtotal
                 var subTotalIncludingTax = _workContext.TaxDisplayType == TaxDisplayType.IncludingTax && !_taxSettings.ForceTaxExclusionFromOrderSubtotal;
-                _orderTotalCalculationService.GetShoppingCartSubTotal(cart, subTotalIncludingTax, out decimal orderSubTotalDiscountAmountBase, out List<DiscountForCaching> _, out decimal subTotalWithoutDiscountBase, out decimal _);
+                _orderTotalCalculationService.GetShoppingCartSubTotal(cart, subTotalIncludingTax, out var orderSubTotalDiscountAmountBase, out var _, out var subTotalWithoutDiscountBase, out var _);
                 var subtotalBase = subTotalWithoutDiscountBase;
                 var subtotal = _currencyService.ConvertFromPrimaryStoreCurrency(subtotalBase, _workContext.WorkingCurrency);
                 model.SubTotal = _priceFormatter.FormatPrice(subtotal, true, _workContext.WorkingCurrency, _workContext.WorkingLanguage, subTotalIncludingTax);
@@ -304,12 +317,14 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                     model.SubTotalDiscount = _priceFormatter.FormatPrice(-orderSubTotalDiscountAmount, true, _workContext.WorkingCurrency, _workContext.WorkingLanguage, subTotalIncludingTax);
                 }
 
+                //LoadAllShippingRateComputationMethods
+                var shippingRateComputationMethods = _shippingPluginManager.LoadActivePlugins(_workContext.CurrentCustomer, _storeContext.CurrentStore.Id);
 
                 //shipping info
                 model.RequiresShipping = _shoppingCartService.ShoppingCartRequiresShipping(cart);
                 if (model.RequiresShipping)
                 {
-                    var shoppingCartShippingBase = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart);
+                    var shoppingCartShippingBase = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, shippingRateComputationMethods);
                     if (shoppingCartShippingBase.HasValue)
                     {
                         var shoppingCartShipping = _currencyService.ConvertFromPrimaryStoreCurrency(shoppingCartShippingBase.Value, _workContext.WorkingCurrency);
@@ -336,7 +351,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                     var paymentMethodAdditionalFeeWithTax = _currencyService.ConvertFromPrimaryStoreCurrency(paymentMethodAdditionalFeeWithTaxBase, _workContext.WorkingCurrency);
                     model.PaymentMethodAdditionalFee = _priceFormatter.FormatPaymentMethodAdditionalFee(paymentMethodAdditionalFeeWithTax, true);
                 }
-                
+
                 //tax
                 var displayTax = true;
                 var displayTaxRates = true;
@@ -347,7 +362,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 }
                 else
                 {
-                    var shoppingCartTaxBase = _orderTotalCalculationService.GetTaxTotal(cart, out SortedDictionary<decimal, decimal> taxRates);
+                    var shoppingCartTaxBase = _orderTotalCalculationService.GetTaxTotal(cart, shippingRateComputationMethods, out var taxRates);
 
                     //Avalara plugin changes
                     //get tax details from the Avalara tax service, it may slightly differ from the original calculated tax
@@ -390,7 +405,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 model.DisplayTax = displayTax;
 
                 //total
-                var shoppingCartTotalBase = _orderTotalCalculationService.GetShoppingCartTotal(cart, out decimal orderTotalDiscountAmountBase, out List<DiscountForCaching> _, out List<AppliedGiftCard> appliedGiftCards, out int redeemedRewardPoints, out decimal redeemedRewardPointsAmount);
+                var shoppingCartTotalBase = _orderTotalCalculationService.GetShoppingCartTotal(cart, out var orderTotalDiscountAmountBase, out var _, out var appliedGiftCards, out var redeemedRewardPoints, out var redeemedRewardPointsAmount);
                 if (shoppingCartTotalBase.HasValue)
                 {
                     var shoppingCartTotal = _currencyService.ConvertFromPrimaryStoreCurrency(shoppingCartTotalBase.Value, _workContext.WorkingCurrency);
@@ -437,7 +452,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 if (_rewardPointsSettings.Enabled && _rewardPointsSettings.DisplayHowMuchWillBeEarned && shoppingCartTotalBase.HasValue)
                 {
                     //get shipping total
-                    var shippingBaseInclTax = !model.RequiresShipping ? 0 : _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, true) ?? 0;
+                    var shippingBaseInclTax = !model.RequiresShipping ? 0 : _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, true, shippingRateComputationMethods) ?? 0;
 
                     //get total for reward points
                     var totalForRewardPoints = _orderTotalCalculationService

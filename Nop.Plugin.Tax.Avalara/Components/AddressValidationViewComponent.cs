@@ -13,7 +13,6 @@ using Nop.Services.Common;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
-using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Framework.Components;
 using Nop.Web.Framework.Infrastructure;
@@ -23,7 +22,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
     /// <summary>
     /// Represents a view component to validate entered address and display a confirmation dialog on the checkout page
     /// </summary>
-    [ViewComponent(Name = AvalaraTaxDefaults.AddressValidationViewComponentName)]
+    [ViewComponent(Name = AvalaraTaxDefaults.ADDRESS_VALIDATION_VIEW_COMPONENT_NAME)]
     public class AddressValidationViewComponent : NopViewComponent
     {
         #region Fields
@@ -34,9 +33,9 @@ namespace Nop.Plugin.Tax.Avalara.Components
         private readonly ICountryService _countryService;
         private readonly ILocalizationService _localizationService;
         private readonly ILogger _logger;
-        private readonly IPermissionService _permissionService;
         private readonly IStateProvinceService _stateProvinceService;
-        private readonly ITaxService _taxService;
+        private readonly IStoreContext _storeContext;
+        private readonly ITaxPluginManager _taxPluginManager;
         private readonly IWorkContext _workContext;
         private readonly TaxSettings _taxSettings;
 
@@ -50,23 +49,23 @@ namespace Nop.Plugin.Tax.Avalara.Components
             ICountryService countryService,
             ILocalizationService localizationService,
             ILogger logger,
-            IPermissionService permissionService,
             IStateProvinceService stateProvinceService,
-            ITaxService taxService,
+            IStoreContext storeContext,
+            ITaxPluginManager taxPluginManager,
             IWorkContext workContext,
             TaxSettings taxSettings)
         {
-            this._avalaraTaxManager = avalaraTaxManager;
-            this._avalaraTaxSettings = avalaraTaxSettings;
-            this._addressService = addressService;
-            this._countryService = countryService;
-            this._localizationService = localizationService;
-            this._logger = logger;
-            this._permissionService = permissionService;
-            this._stateProvinceService = stateProvinceService;
-            this._taxService = taxService;
-            this._workContext = workContext;
-            this._taxSettings = taxSettings;
+            _avalaraTaxManager = avalaraTaxManager;
+            _avalaraTaxSettings = avalaraTaxSettings;
+            _addressService = addressService;
+            _countryService = countryService;
+            _localizationService = localizationService;
+            _logger = logger;
+            _stateProvinceService = stateProvinceService;
+            _storeContext = storeContext;
+            _taxPluginManager = taxPluginManager;
+            _workContext = workContext;
+            _taxSettings = taxSettings;
         }
 
         #endregion
@@ -102,7 +101,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
         public IViewComponentResult Invoke(string widgetZone, object additionalData)
         {
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName, _workContext.CurrentCustomer, _storeContext.CurrentStore.Id))
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone
@@ -114,11 +113,11 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //validate entered by customer addresses only
-            Address address = null;
-            if (_taxSettings.TaxBasedOn == TaxBasedOn.BillingAddress)
-                address = _workContext.CurrentCustomer.BillingAddress;
-            if (_taxSettings.TaxBasedOn == TaxBasedOn.ShippingAddress)
-                address = _workContext.CurrentCustomer.ShippingAddress;
+            var address = _taxSettings.TaxBasedOn == TaxBasedOn.BillingAddress
+                ? _workContext.CurrentCustomer.BillingAddress
+                : _taxSettings.TaxBasedOn == TaxBasedOn.ShippingAddress
+                ? _workContext.CurrentCustomer.ShippingAddress
+                : null;
             if (address == null)
                 return Content(string.Empty);
 

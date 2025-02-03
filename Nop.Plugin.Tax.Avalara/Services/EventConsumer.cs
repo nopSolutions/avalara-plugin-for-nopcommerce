@@ -43,7 +43,8 @@ namespace Nop.Plugin.Tax.Avalara.Services
         private readonly IPermissionService _permissionService;
         private readonly IProductService _productService;
         private readonly ISettingService _settingService;
-        private readonly ITaxService _taxService;
+        private readonly IStoreContext _storeContext;
+        private readonly ITaxPluginManager _taxPluginManager;
         private readonly IWorkContext _workContext;
 
         #endregion
@@ -58,19 +59,21 @@ namespace Nop.Plugin.Tax.Avalara.Services
             IPermissionService permissionService,
             IProductService productService,
             ISettingService settingService,
-            ITaxService taxService,
+            IStoreContext storeContext,
+            ITaxPluginManager taxPluginManager,
             IWorkContext workContext)
         {
-            this._avalaraTaxSettings = avalaraTaxSettings;
-            this._checkoutAttributeService = checkoutAttributeService;
-            this._customerService = customerService;
-            this._genericAttributeService = genericAttributeService;
-            this._httpContextAccessor = httpContextAccessor;
-            this._permissionService = permissionService;
-            this._productService = productService;
-            this._settingService = settingService;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _avalaraTaxSettings = avalaraTaxSettings;
+            _checkoutAttributeService = checkoutAttributeService;
+            _customerService = customerService;
+            _genericAttributeService = genericAttributeService;
+            _httpContextAccessor = httpContextAccessor;
+            _permissionService = permissionService;
+            _productService = productService;
+            _settingService = settingService;
+            _storeContext = storeContext;
+            _taxPluginManager = taxPluginManager;
+            _workContext = workContext;
         }
 
         #endregion
@@ -88,9 +91,9 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //get entity by received model
-            var entity = model is CustomerModel ? (BaseEntity)_customerService.GetCustomerById(model.Id)
-                : model is CustomerRoleModel ? (BaseEntity)_customerService.GetCustomerRoleById(model.Id)
-                : model is ProductModel ? (BaseEntity)_productService.GetProductById(model.Id)
+            var entity = model is CustomerModel ? _customerService.GetCustomerById(model.Id)
+                : model is CustomerRoleModel ? _customerService.GetCustomerRoleById(model.Id)
+                : model is ProductModel ? _productService.GetProductById(model.Id)
                 : model is CheckoutAttributeModel ? (BaseEntity)_checkoutAttributeService.GetCheckoutAttributeById(model.Id)
                 : null;
             if (entity == null)
@@ -100,11 +103,11 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return;
 
             //whether there is a form value for the entity use code
-            if (_httpContextAccessor.HttpContext.Request.Form.TryGetValue(AvalaraTaxDefaults.EntityUseCodeAttribute, out StringValues entityUseCodeValue)
+            if (_httpContextAccessor.HttpContext.Request.Form.TryGetValue(AvalaraTaxDefaults.EntityUseCodeAttribute, out var entityUseCodeValue)
                 && !StringValues.IsNullOrEmpty(entityUseCodeValue))
             {
                 //save attribute
@@ -127,12 +130,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return;
 
             //whether there is a form value for the tax origin address type 
-            if (_httpContextAccessor.HttpContext.Request.Form.TryGetValue(AvalaraTaxDefaults.TaxOriginField, out StringValues taxOriginValue)
-                && int.TryParse(taxOriginValue, out int taxOriginType))
+            if (_httpContextAccessor.HttpContext.Request.Form.TryGetValue(AvalaraTaxDefaults.TaxOriginField, out var taxOriginValue)
+                && int.TryParse(taxOriginValue, out var taxOriginType))
             {
                 //save settings
                 _avalaraTaxSettings.TaxOriginAddressType = (TaxOriginAddressType)taxOriginType;
@@ -154,11 +157,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (_taxService.LoadActiveTaxProvider(eventMessage.Entity.Customer) is AvalaraTaxProvider taxProvider)
-            {
-                //delete tax transaction
-                taxProvider.DeleteTaxTransaction(eventMessage.Entity);
-            }
+            var taxProvider = _taxPluginManager.LoadPluginBySystemName(AvalaraTaxDefaults.SystemName) as AvalaraTaxProvider;
+            if (!_taxPluginManager.IsPluginActive(taxProvider))
+                return;
+
+            //delete tax transaction
+            taxProvider.DeleteTaxTransaction(eventMessage.Entity);
         }
 
         /// <summary>
@@ -181,11 +185,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (_taxService.LoadActiveTaxProvider(eventMessage.Order.Customer) is AvalaraTaxProvider taxProvider)
-            {
-                //void tax transaction
-                taxProvider.VoidTaxTransaction(eventMessage.Order);
-            }
+            var taxProvider = _taxPluginManager.LoadPluginBySystemName(AvalaraTaxDefaults.SystemName) as AvalaraTaxProvider;
+            if (!_taxPluginManager.IsPluginActive(taxProvider))
+                return;
+
+            //void tax transaction
+            taxProvider.VoidTaxTransaction(eventMessage.Order);
         }
 
         /// <summary>
@@ -198,11 +203,14 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (_taxService.LoadActiveTaxProvider(eventMessage.Order.Customer) is AvalaraTaxProvider taxProvider)
-            {
-                //create tax transaction
-                taxProvider.CreateOrderTaxTransaction(eventMessage.Order, true);
-            }
+            var taxProvider = _taxPluginManager
+                .LoadPluginBySystemName(AvalaraTaxDefaults.SystemName, _workContext.CurrentCustomer, _storeContext.CurrentStore.Id)
+                as AvalaraTaxProvider;
+            if (!_taxPluginManager.IsPluginActive(taxProvider))
+                return;
+
+            //create tax transaction
+            taxProvider.CreateOrderTaxTransaction(eventMessage.Order, true);
         }
 
         /// <summary>
@@ -215,11 +223,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (_taxService.LoadActiveTaxProvider(eventMessage.Order.Customer) is AvalaraTaxProvider taxProvider)
-            {
-                //refund tax transaction
-                taxProvider.RefundTaxTransaction(eventMessage.Order, eventMessage.Amount);
-            }
+            var taxProvider = _taxPluginManager.LoadPluginBySystemName(AvalaraTaxDefaults.SystemName) as AvalaraTaxProvider;
+            if (!_taxPluginManager.IsPluginActive(taxProvider))
+                return;
+
+            //refund tax transaction
+            taxProvider.RefundTaxTransaction(eventMessage.Order, eventMessage.Amount);
         }
 
         /// <summary>
@@ -232,11 +241,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return;
 
             //ensure that Avalara tax provider is active
-            if (_taxService.LoadActiveTaxProvider(eventMessage.Order.Customer) is AvalaraTaxProvider taxProvider)
-            {
-                //void tax transaction
-                taxProvider.VoidTaxTransaction(eventMessage.Order);
-            }
+            var taxProvider = _taxPluginManager.LoadPluginBySystemName(AvalaraTaxDefaults.SystemName) as AvalaraTaxProvider;
+            if (!_taxPluginManager.IsPluginActive(taxProvider))
+                return;
+
+            //void tax transaction
+            taxProvider.VoidTaxTransaction(eventMessage.Order);
         }
 
         #endregion

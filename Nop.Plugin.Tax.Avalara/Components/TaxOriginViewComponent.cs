@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Nop.Core;
+﻿using System.Linq;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Models.Settings;
 using Nop.Services;
 using Nop.Services.Security;
@@ -13,15 +15,14 @@ namespace Nop.Plugin.Tax.Avalara.Components
     /// <summary>
     /// Represents a view component to render an additional field on a tax settings view
     /// </summary>
-    [ViewComponent(Name = AvalaraTaxDefaults.TaxOriginViewComponentName)]
+    [ViewComponent(Name = AvalaraTaxDefaults.TAX_ORIGIN_VIEW_COMPONENT_NAME)]
     public class TaxOriginViewComponent : NopViewComponent
     {
         #region Fields
 
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly IPermissionService _permissionService;
-        private readonly ITaxService _taxService;
-        private readonly IWorkContext _workContext;
+        private readonly ITaxPluginManager _taxPluginManager;
 
         #endregion
 
@@ -29,13 +30,11 @@ namespace Nop.Plugin.Tax.Avalara.Components
 
         public TaxOriginViewComponent(AvalaraTaxSettings avalaraTaxSettings,
             IPermissionService permissionService,
-            ITaxService taxService,
-            IWorkContext workContext)
+            ITaxPluginManager taxPluginManager)
         {
-            this._avalaraTaxSettings = avalaraTaxSettings;
-            this._permissionService = permissionService;
-            this._taxService = taxService;
-            this._workContext = workContext;
+            _avalaraTaxSettings = avalaraTaxSettings;
+            _permissionService = permissionService;
+            _taxPluginManager = taxPluginManager;
         }
 
         #endregion
@@ -54,21 +53,21 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
+            if (!_taxPluginManager.IsPluginActive(AvalaraTaxDefaults.SystemName))
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone
-            if (!widgetZone.Equals(AdminWidgetZones.TaxSettingsTop))
+            if (!widgetZone.Equals(AdminWidgetZones.TaxSettingsDetailsBlock))
                 return Content(string.Empty);
 
             //prepare model
             var model = new TaxOriginAddressTypeModel
             {
+                PrecedingElementId = nameof(TaxSettingsModel.TaxBasedOn),
                 AvalaraTaxOriginAddressType = (int)_avalaraTaxSettings.TaxOriginAddressType,
-                TaxOriginAddressTypes = _avalaraTaxSettings.TaxOriginAddressType.ToSelectList()
+                TaxOriginAddressTypes = TaxOriginAddressType.DefaultTaxAddress.ToSelectList(false)
+                    .Select(type => new SelectListItem(type.Text, type.Value)).ToList(),
             };
-            var taxSettingsModel = new TaxSettingsModel();
-            model.PrecedingElementId = nameof(taxSettingsModel.TaxBasedOn);
 
             return View("~/Plugins/Tax.Avalara/Views/Settings/TaxOriginAddressType.cshtml", model);
         }

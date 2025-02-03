@@ -54,8 +54,10 @@ namespace Nop.Plugin.Tax.Avalara.Services
         private readonly IOrderTotalCalculationService _orderTotalCalculationService;
         private readonly IPaymentService _paymentService;
         private readonly IPriceFormatter _priceFormatter;
+        private readonly IShippingPluginManager _shippingPluginManager;
         private readonly IShoppingCartService _shoppingCartService;
         private readonly IStateProvinceService _stateProvinceService;
+        private readonly IStoreContext _storeContext;
         private readonly ITaxService _taxService;
         private readonly IWorkContext _workContext;
         private readonly OrderSettings _orderSettings;
@@ -85,6 +87,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             ILogger logger,
             IOrderService orderService,
             IOrderTotalCalculationService orderTotalCalculationService,
+            IPaymentPluginManager paymentPluginManager,
             IPaymentService paymentService,
             IPdfService pdfService,
             IPriceCalculationService priceCalculationService,
@@ -94,9 +97,11 @@ namespace Nop.Plugin.Tax.Avalara.Services
             IProductService productService,
             IRewardPointService rewardPointService,
             IShipmentService shipmentService,
+            IShippingPluginManager shippingPluginManager,
             IShippingService shippingService,
             IShoppingCartService shoppingCartService,
             IStateProvinceService stateProvinceService,
+            IStoreContext storeContext,
             ITaxService taxService,
             IVendorService vendorService,
             IWebHelper webHelper,
@@ -125,6 +130,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 logger,
                 orderService,
                 orderTotalCalculationService,
+                paymentPluginManager,
                 paymentService,
                 pdfService,
                 priceCalculationService,
@@ -134,9 +140,11 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 productService,
                 rewardPointService,
                 shipmentService,
+                shippingPluginManager,
                 shippingService,
                 shoppingCartService,
                 stateProvinceService,
+                storeContext,
                 taxService,
                 vendorService,
                 webHelper,
@@ -149,27 +157,29 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 shippingSettings,
                 taxSettings)
         {
-            this._currencySettings = currencySettings;
-            this._affiliateService = affiliateService;
-            this._checkoutAttributeFormatter = checkoutAttributeFormatter;
-            this._countryService = countryService;
-            this._currencyService = currencyService;
-            this._customerService = customerService;
-            this._discountService = discountService;
-            this._genericAttributeService = genericAttributeService;
-            this._httpContextAccessor = httpContextAccessor;
-            this._languageService = languageService;
-            this._localizationService = localizationService;
-            this._orderTotalCalculationService = orderTotalCalculationService;
-            this._paymentService = paymentService;
-            this._priceFormatter = priceFormatter;
-            this._shoppingCartService = shoppingCartService;
-            this._stateProvinceService = stateProvinceService;
-            this._taxService = taxService;
-            this._workContext = workContext;
-            this._orderSettings = orderSettings;
-            this._shippingSettings = shippingSettings;
-            this._taxSettings = taxSettings;
+            _currencySettings = currencySettings;
+            _affiliateService = affiliateService;
+            _checkoutAttributeFormatter = checkoutAttributeFormatter;
+            _countryService = countryService;
+            _currencyService = currencyService;
+            _customerService = customerService;
+            _discountService = discountService;
+            _genericAttributeService = genericAttributeService;
+            _httpContextAccessor = httpContextAccessor;
+            _languageService = languageService;
+            _localizationService = localizationService;
+            _orderTotalCalculationService = orderTotalCalculationService;
+            _paymentService = paymentService;
+            _priceFormatter = priceFormatter;
+            _shippingPluginManager = shippingPluginManager;
+            _shoppingCartService = shoppingCartService;
+            _stateProvinceService = stateProvinceService;
+            _storeContext = storeContext;
+            _taxService = taxService;
+            _workContext = workContext;
+            _orderSettings = orderSettings;
+            _shippingSettings = shippingSettings;
+            _taxSettings = taxSettings;
         }
 
         #endregion
@@ -230,8 +240,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             details.CheckoutAttributeDescription = _checkoutAttributeFormatter.FormatAttributes(details.CheckoutAttributesXml, details.Customer);
 
             //load shopping cart
-            details.Cart = details.Customer.ShoppingCartItems.Where(sci => sci.ShoppingCartType == ShoppingCartType.ShoppingCart)
-                .LimitPerStore(processPaymentRequest.StoreId).ToList();
+            details.Cart = _shoppingCartService.GetShoppingCart(details.Customer, ShoppingCartType.ShoppingCart, processPaymentRequest.StoreId);
 
             if (!details.Cart.Any())
                 throw new NopException("Cart is empty");
@@ -293,12 +302,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
             {
                 var pickupPoint = _genericAttributeService.GetAttribute<PickupPoint>(details.Customer,
                     NopCustomerDefaults.SelectedPickupPointAttribute, processPaymentRequest.StoreId);
-                if (_shippingSettings.AllowPickUpInStore && pickupPoint != null)
+                if (_shippingSettings.AllowPickupInStore && pickupPoint != null)
                 {
                     var country = _countryService.GetCountryByTwoLetterIsoCode(pickupPoint.CountryCode);
                     var state = _stateProvinceService.GetStateProvinceByAbbreviation(pickupPoint.StateAbbreviation, country?.Id);
 
-                    details.PickUpInStore = true;
+                    details.PickupInStore = true;
                     details.PickupAddress = new Address
                     {
                         Address1 = pickupPoint.Address,
@@ -337,9 +346,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
             else
                 details.ShippingStatus = ShippingStatus.ShippingNotRequired;
 
+            //LoadAllShippingRateComputationMethods
+            var shippingRateComputationMethods = _shippingPluginManager.LoadActivePlugins(_workContext.CurrentCustomer, _storeContext.CurrentStore.Id);
+
             //shipping total
-            var orderShippingTotalInclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(details.Cart, true, out var _, out var shippingTotalDiscounts);
-            var orderShippingTotalExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(details.Cart, false);
+            var orderShippingTotalInclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(details.Cart, true, shippingRateComputationMethods, out var _, out var shippingTotalDiscounts);
+            var orderShippingTotalExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(details.Cart, false, shippingRateComputationMethods);
             if (!orderShippingTotalInclTax.HasValue || !orderShippingTotalExclTax.HasValue)
                 throw new NopException("Shipping total couldn't be calculated");
 
@@ -356,7 +368,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             details.PaymentAdditionalFeeExclTax = _taxService.GetPaymentMethodAdditionalFee(paymentAdditionalFee, false, details.Customer);
 
             //tax amount
-            details.OrderTaxTotal = _orderTotalCalculationService.GetTaxTotal(details.Cart, out var taxRatesDictionary);
+            details.OrderTaxTotal = _orderTotalCalculationService.GetTaxTotal(details.Cart, shippingRateComputationMethods, out var taxRatesDictionary);
 
             //Avalara plugin changes
             //get previously saved tax details received from the Avalara tax service
@@ -380,12 +392,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
             //tax rates
             details.TaxRates = taxRatesDictionary.Aggregate(string.Empty, (current, next) =>
                 $"{current}{next.Key.ToString(CultureInfo.InvariantCulture)}:{next.Value.ToString(CultureInfo.InvariantCulture)};   ");
-            
+
             //order total (and applied discounts, gift cards, reward points)
             var orderTotal = _orderTotalCalculationService.GetShoppingCartTotal(details.Cart, out var orderDiscountAmount, out var orderAppliedDiscounts, out var appliedGiftCards, out var redeemedRewardPoints, out var redeemedRewardPointsAmount);
             if (!orderTotal.HasValue)
                 throw new NopException("Order total couldn't be calculated");
-            
+
             details.OrderDiscountAmount = orderDiscountAmount;
             details.RedeemedRewardPoints = redeemedRewardPoints;
             details.RedeemedRewardPointsAmount = redeemedRewardPointsAmount;
@@ -399,9 +411,14 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
             processPaymentRequest.OrderTotal = details.OrderTotal;
 
+            //Avalara plugin changes
+            //delete custom value
+            _httpContextAccessor.HttpContext.Session.Set<TaxDetails>(AvalaraTaxDefaults.TaxDetailsSessionValue, null);
+            //Avalara plugin changes
+
             //recurring or standard shopping cart?
             details.IsRecurringShoppingCart = _shoppingCartService.ShoppingCartIsRecurring(details.Cart);
-            if (!details.IsRecurringShoppingCart) 
+            if (!details.IsRecurringShoppingCart)
                 return details;
 
             var recurringCyclesError = _shoppingCartService.GetRecurringCycleInfo(details.Cart,
@@ -412,11 +429,6 @@ namespace Nop.Plugin.Tax.Avalara.Services
             processPaymentRequest.RecurringCycleLength = recurringCycleLength;
             processPaymentRequest.RecurringCyclePeriod = recurringCyclePeriod;
             processPaymentRequest.RecurringTotalCycles = recurringTotalCycles;
-
-            //Avalara plugin changes
-            //delete custom value
-            _httpContextAccessor.HttpContext.Session.Set<TaxDetails>(AvalaraTaxDefaults.TaxDetailsSessionValue, null);
-            //Avalara plugin changes
 
             return details;
         }

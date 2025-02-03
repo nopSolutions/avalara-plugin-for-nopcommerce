@@ -25,10 +25,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             IWorkContext workContext,
             TaxSettings taxSettings)
         {
-            this._addressService = addressService;
-            this._customerService = customerService;
-            this._workContext = workContext;
-            this._taxSettings = taxSettings;
+            _addressService = addressService;
+            _customerService = customerService;
+            _workContext = workContext;
+            _taxSettings = taxSettings;
         }
 
         #endregion

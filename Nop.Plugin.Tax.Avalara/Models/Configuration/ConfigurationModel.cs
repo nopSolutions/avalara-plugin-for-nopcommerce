@@ -54,6 +54,10 @@ namespace Nop.Plugin.Tax.Avalara.Models.Configuration
 
         public TaxTransactionLogSearchModel TaxTransactionLogSearchModel { get; set; }
 
+        public bool HideGeneralBlock { get; set; }
+
+        public bool HideLogBlock { get; set; }
+
         #endregion
     }
 }

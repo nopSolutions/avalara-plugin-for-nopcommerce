@@ -1,4 +1,4 @@
-using Autofac;
+﻿using Autofac;
 using Autofac.Core;
 using Nop.Core.Configuration;
 using Nop.Core.Data;
@@ -33,11 +33,10 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
             builder.RegisterType<OverriddenOrderTotalCalculationService>().As<IOrderTotalCalculationService>().InstancePerLifetimeScope();
             builder.RegisterType<OverriddenShoppingCartModelFactory>().As<Web.Factories.IShoppingCartModelFactory>().InstancePerLifetimeScope();
             builder.RegisterType<OverriddenTaxModelFactory>().As<ITaxModelFactory>().InstancePerLifetimeScope();
-            builder.RegisterType<OverriddenWidgetModelFactory>().As<IWidgetModelFactory>().InstancePerLifetimeScope();
 
             //register custom services
             builder.RegisterType<AvalaraTaxManager>().AsSelf().InstancePerLifetimeScope();
-            builder.RegisterType<TaxTransactionLogService>().As<ITaxTransactionLogService>().InstancePerLifetimeScope();
+            builder.RegisterType<TaxTransactionLogService>().AsSelf().InstancePerLifetimeScope();
 
             //register custom data context
             builder.RegisterPluginDataContext<TaxTransactionLogObjectContext>(AvalaraTaxDefaults.ObjectContextName);
